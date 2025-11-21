@@ -2538,3 +2538,223 @@ body.modal-open {
   align-items: center;
   justify-content: center;
 }
+/* ===== TIMETABLE TABLE STYLES ===== */
+.timetable-table-container {
+  overflow-x: auto;
+  margin: 1rem 0;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  background: var(--white);
+}
+
+.timetable-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.timetable-table th {
+  background: var(--primary);
+  color: var(--text-white);
+  padding: 1rem;
+  text-align: center;
+  font-weight: 600;
+  border: 1px solid var(--primary-dark);
+}
+
+.timetable-table td {
+  padding: 0.75rem;
+  border: 1px solid var(--light-3);
+  vertical-align: top;
+  min-width: 180px;
+}
+
+.time-slot {
+  background: var(--light-2);
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.timetable-cell {
+  background: var(--white);
+  transition: var(--transition-normal);
+}
+
+.timetable-cell:hover {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Cell Type Styles */
+.theory-cell {
+  background: #dbeafe;
+  border-left: 4px solid var(--primary);
+}
+
+.lab-cell {
+  background: #dcfce7;
+  border-left: 4px solid var(--success);
+}
+
+.break-cell {
+  background: #fef3c7;
+  border-left: 4px solid var(--warning);
+}
+
+.lunch-cell {
+  background: #fce7f3;
+  border-left: 4px solid #ec4899;
+}
+
+.free-cell {
+  background: #f1f5f9;
+  border-left: 4px solid var(--gray);
+}
+
+.empty-cell {
+  background: #f8fafc;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Course Info Styles */
+.course-info {
+  text-align: center;
+}
+
+.course-code {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+}
+
+.course-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+  line-height: 1.2;
+}
+
+.course-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.course-details span {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  justify-content: center;
+}
+
+.special-slot {
+  text-align: center;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0.5rem;
+}
+
+/* Timetable Legend */
+.timetable-legend {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: var(--light-2);
+  border-radius: var(--radius-md);
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.color-box {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  border: 2px solid rgba(0,0,0,0.1);
+}
+
+.color-box.theory-cell { background: #dbeafe; }
+.color-box.lab-cell { background: #dcfce7; }
+.color-box.break-cell { background: #fef3c7; }
+.color-box.lunch-cell { background: #fce7f3; }
+.color-box.free-cell { background: #f1f5f9; }
+
+/* Timetable Stats */
+.timetable-stats {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--light-2);
+  border-radius: var(--radius-lg);
+}
+
+.timetable-stats h4 {
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.stats-grid .stat-item {
+  background: var(--white);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+.stats-grid .stat-number {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.stats-grid .stat-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .timetable-table {
+    font-size: 0.8rem;
+  }
+  
+  .timetable-table th,
+  .timetable-table td {
+    padding: 0.5rem 0.25rem;
+  }
+  
+  .timetable-legend {
+    gap: 1rem;
+  }
+  
+  .course-details {
+    font-size: 0.75rem;
+  }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

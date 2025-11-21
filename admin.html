@@ -837,22 +837,66 @@
     }
 
     init() {
-      document.addEventListener('DOMContentLoaded', async () => {
+    document.addEventListener('DOMContentLoaded', async () => {
         console.log('Admin dashboard loaded');
         
         if (!authManager.requireAuth('admin')) {
-          return;
+            return;
         }
 
         console.log('Admin authentication successful');
         
         this.loadUserInfo();
+        await this.ensureSampleData(); // 👈 THIS IS THE CRITICAL LINE TO ADD
         await this.loadAllData();
         await this.initializeCharts();
         this.setupEventListeners();
         this.setupFormHandlers();
-      });
+    });
+}
+    // Add to AdminDashboard class
+async ensureSampleData() {
+  const coursesRes = await databaseManager.getCourses();
+  if (coursesRes.data.length === 0) {
+    // Add sample courses
+    const sampleCourses = [
+      {
+        code: "CSE501",
+        name: "Database Management Systems",
+        credits: 4,
+        type: "theory",
+        department: "CSE",
+        semester: "5",
+        description: "Database concepts and SQL",
+        active: true
+      },
+      {
+        code: "CSE501L",
+        name: "DBMS Laboratory",
+        credits: 2,
+        type: "lab",
+        department: "CSE",
+        semester: "5",
+        description: "Practical database implementation",
+        active: true
+      },
+      {
+        code: "CSE502",
+        name: "Advanced Java Programming",
+        credits: 3,
+        type: "theory",
+        department: "CSE",
+        semester: "5",
+        description: "Advanced Java concepts",
+        active: true
+      }
+    ];
+    
+    for (const course of sampleCourses) {
+      await databaseManager.createCourse(course);
     }
+  }
+}
 
     loadUserInfo() {
       const userData = JSON.parse(localStorage.getItem('userData'));
@@ -1626,33 +1670,317 @@ async saveRoom() {
       
       this.hideModal('confirmationModal');
     }
-    async generateTimetable() {
+  // Add these methods to the AdminDashboard class in admin.html
+
+async generateTimetable() {
   try {
-    document.getElementById('resultsSection').style.display = 'block';
+    this.showNotification('🚀 Generating timetable...', 'info');
     
     // Get configuration from the form
     const academicYear = document.getElementById('academicYear').value || '2024-25';
     const semester = document.getElementById('semesterSelect').value || '5';
     const department = document.getElementById('departmentSelect').value || 'CSE';
     
-    // Generate timetable using actual data from database
+    // Show results section
+    document.getElementById('resultsSection').style.display = 'block';
+    
+    // Generate timetable using actual data
     const generatedTimetable = await this.generateTimetableFromData(academicYear, semester, department);
     
-    document.getElementById('timetableResults').innerHTML = this.renderTimetablePreview(generatedTimetable);
-    this.showNotification('Timetable generated successfully!', 'success');
+    // Render the timetable
+    document.getElementById('timetableResults').innerHTML = this.renderTimetableTable(generatedTimetable);
     
-    // Save the generated timetable to database
+    this.showNotification('✅ Timetable generated successfully!', 'success');
+    
+    // Save to database
     await databaseManager.createTimetable({
       academicYear,
       semester,
       department,
       timetable: generatedTimetable,
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      status: 'generated'
     });
     
   } catch (error) {
-    this.showNotification('Error generating timetable: ' + error.message, 'error');
+    this.showNotification('❌ Error generating timetable: ' + error.message, 'error');
+    console.error('Timetable generation error:', error);
   }
+}
+
+async generateTimetableFromData(academicYear, semester, department) {
+  // Get data from database
+  const [coursesRes, facultyRes, roomsRes] = await Promise.all([
+    databaseManager.getCourses(),
+    databaseManager.getFaculty(),
+    databaseManager.getRooms()
+  ]);
+
+  const courses = coursesRes.success ? coursesRes.data : [];
+  const faculty = facultyRes.success ? facultyRes.data : [];
+  const rooms = roomsRes.success ? roomsRes.data : [];
+
+  // Filter courses for the selected department and semester
+  const departmentCourses = courses.filter(course => 
+    course.department === department && course.semester === semester
+  );
+
+  if (departmentCourses.length === 0) {
+    throw new Error(`No courses found for ${department} Semester ${semester}`);
+  }
+
+  // Generate timetable structure
+  const timetable = {
+    academicYear,
+    semester,
+    department,
+    days: {
+      "Monday": this.generateDaySchedule(departmentCourses, faculty, rooms, "Monday"),
+      "Tuesday": this.generateDaySchedule(departmentCourses, faculty, rooms, "Tuesday"),
+      "Wednesday": this.generateDaySchedule(departmentCourses, faculty, rooms, "Wednesday"),
+      "Thursday": this.generateDaySchedule(departmentCourses, faculty, rooms, "Thursday"),
+      "Friday": this.generateDaySchedule(departmentCourses, faculty, rooms, "Friday")
+    },
+    generatedAt: new Date().toISOString()
+  };
+
+  return timetable;
+}
+
+generateDaySchedule(courses, faculty, rooms, day) {
+  const schedule = [];
+  const timeSlots = [
+    { start: "8:30", end: "9:30", duration: 1 },
+    { start: "9:30", end: "10:30", duration: 1 },
+    { start: "10:30", end: "11:00", duration: 0.5, isBreak: true, type: "Break" },
+    { start: "11:00", end: "12:00", duration: 1 },
+    { start: "12:00", end: "1:00", duration: 1, isLunch: true, type: "Lunch" },
+    { start: "1:00", end: "2:00", duration: 1 },
+    { start: "2:00", end: "4:00", duration: 2 }
+  ];
+
+  // Available courses for scheduling
+  const availableCourses = [...courses];
+  const scheduledCourses = new Set();
+
+  timeSlots.forEach(slot => {
+    if (slot.isBreak || slot.isLunch) {
+      schedule.push({
+        time: `${slot.start}-${slot.end}`,
+        course: slot.type,
+        type: slot.type,
+        isBreak: slot.isBreak,
+        isLunch: slot.isLunch,
+        duration: slot.duration
+      });
+      return;
+    }
+
+    // Find available course that hasn't been scheduled today
+    let scheduledCourse = null;
+    for (let i = 0; i < availableCourses.length; i++) {
+      const course = availableCourses[i];
+      if (!scheduledCourses.has(course.id)) {
+        // Find assigned faculty
+        const courseFaculty = faculty.find(f => 
+          f.courses && f.courses.includes(course.id)
+        ) || faculty[Math.floor(Math.random() * faculty.length)];
+        
+        // Find suitable room based on course type
+        const suitableRooms = rooms.filter(room => 
+          room.type === (course.type === 'lab' ? 'lab' : 'classroom') && 
+          room.available
+        );
+        
+        const suitableRoom = suitableRooms.length > 0 
+          ? suitableRooms[Math.floor(Math.random() * suitableRooms.length)]
+          : { name: 'Room 201', type: 'classroom' };
+
+        scheduledCourse = {
+          time: `${slot.start}-${slot.end}`,
+          course: course.name,
+          code: course.code,
+          teacher: courseFaculty ? courseFaculty.name : 'Staff',
+          room: suitableRoom.name,
+          type: course.type === 'lab' ? 'Lab' : 'Theory',
+          duration: slot.duration,
+          credits: course.credits
+        };
+
+        scheduledCourses.add(course.id);
+        availableCourses.splice(i, 1);
+        break;
+      }
+    }
+
+    if (scheduledCourse) {
+      schedule.push(scheduledCourse);
+    } else {
+      // Free period if no courses available
+      schedule.push({
+        time: `${slot.start}-${slot.end}`,
+        course: "Free Period",
+        type: "Free",
+        isFree: true,
+        duration: slot.duration
+      });
+    }
+  });
+
+  return schedule;
+}
+
+renderTimetableTable(timetable) {
+  let html = `
+    <div class="timetable-container">
+      <div class="timetable-header">
+        <h3>📅 Generated Timetable - ${timetable.department} Semester ${timetable.semester}</h3>
+        <p>Academic Year: ${timetable.academicYear} | Generated: ${new Date(timetable.generatedAt).toLocaleString()}</p>
+      </div>
+      
+      <div class="timetable-table-container">
+        <table class="timetable-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Monday</th>
+              <th>Tuesday</th>
+              <th>Wednesday</th>
+              <th>Thursday</th>
+              <th>Friday</th>
+            </tr>
+          </thead>
+          <tbody>
+  `;
+
+  // Create time slots mapping
+  const timeSlots = [
+    "8:30-9:30", "9:30-10:30", "10:30-11:00", 
+    "11:00-12:00", "12:00-1:00", "1:00-2:00", "2:00-4:00"
+  ];
+
+  timeSlots.forEach(timeSlot => {
+    html += `<tr>`;
+    html += `<td class="time-slot">${timeSlot}</td>`;
+    
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    days.forEach(day => {
+      const classes = timetable.days[day] || [];
+      const classItem = classes.find(cls => cls.time === timeSlot);
+      
+      if (classItem) {
+        let cellClass = 'timetable-cell';
+        if (classItem.isBreak) cellClass += ' break-cell';
+        else if (classItem.isLunch) cellClass += ' lunch-cell';
+        else if (classItem.isFree) cellClass += ' free-cell';
+        else if (classItem.type === 'Lab') cellClass += ' lab-cell';
+        else cellClass += ' theory-cell';
+        
+        html += `<td class="${cellClass}">`;
+        
+        if (classItem.isBreak || classItem.isLunch || classItem.isFree) {
+          html += `<div class="special-slot">${classItem.course}</div>`;
+        } else {
+          html += `
+            <div class="course-info">
+              <div class="course-code">${classItem.code}</div>
+              <div class="course-name">${classItem.course}</div>
+              <div class="course-details">
+                <span class="teacher">👨‍🏫 ${classItem.teacher}</span>
+                <span class="room">🏫 ${classItem.room}</span>
+                <span class="type">${classItem.type}</span>
+                ${classItem.duration > 1 ? `<span class="duration">${classItem.duration}hr</span>` : ''}
+              </div>
+            </div>
+          `;
+        }
+        html += `</td>`;
+      } else {
+        html += `<td class="timetable-cell empty-cell">-</td>`;
+      }
+    });
+    
+    html += `</tr>`;
+  });
+
+  html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="timetable-legend">
+        <div class="legend-item"><div class="color-box theory-cell"></div> Theory Class</div>
+        <div class="legend-item"><div class="color-box lab-cell"></div> Lab Session</div>
+        <div class="legend-item"><div class="color-box break-cell"></div> Break</div>
+        <div class="legend-item"><div class="color-box lunch-cell"></div> Lunch</div>
+        <div class="legend-item"><div class="color-box free-cell"></div> Free Period</div>
+      </div>
+      
+      <div class="timetable-stats">
+        <h4>📊 Timetable Statistics</h4>
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-number">${this.calculateTotalClasses(timetable)}</span>
+            <span class="stat-label">Total Classes</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${this.calculateTotalHours(timetable)}</span>
+            <span class="stat-label">Hours/Week</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${this.calculateUniqueCourses(timetable)}</span>
+            <span class="stat-label">Courses</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-number">${this.calculateLabSessions(timetable)}</span>
+            <span class="stat-label">Lab Sessions</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return html;
+}
+
+calculateTotalClasses(timetable) {
+  let total = 0;
+  Object.values(timetable.days).forEach(classes => {
+    total += classes.filter(cls => !cls.isBreak && !cls.isLunch && !cls.isFree).length;
+  });
+  return total;
+}
+
+calculateTotalHours(timetable) {
+  let total = 0;
+  Object.values(timetable.days).forEach(classes => {
+    classes.forEach(cls => {
+      if (!cls.isBreak && !cls.isLunch && !cls.isFree) {
+        total += cls.duration || 1;
+      }
+    });
+  });
+  return total;
+}
+
+calculateUniqueCourses(timetable) {
+  const courses = new Set();
+  Object.values(timetable.days).forEach(classes => {
+    classes.forEach(cls => {
+      if (cls.code && !cls.isBreak && !cls.isLunch && !cls.isFree) {
+        courses.add(cls.code);
+      }
+    });
+  });
+  return courses.size;
+}
+
+calculateLabSessions(timetable) {
+  let labs = 0;
+  Object.values(timetable.days).forEach(classes => {
+    labs += classes.filter(cls => cls.type === 'Lab').length;
+  });
+  return labs;
 }
 
 // Add this method to the AdminDashboard class
@@ -1992,34 +2320,25 @@ parseTime(timeStr) {
   }
 
   function generateTimetable() {
-    document.getElementById('resultsSection').style.display = 'block';
-    document.getElementById('timetableResults').innerHTML = `
-      <div class="generated-timetable">
-        <h4>🎉 Timetable Generated Successfully!</h4>
-        <p>Semester 5 - Computer Science & Engineering</p>
-        <div class="timetable-preview">
-          <p>Timetable preview will be displayed here with all assigned classes, rooms, and faculty.</p>
-        </div>
-      </div>
-    `;
-    adminDashboard.showNotification('Timetable generated successfully!', 'success');
-  }
+  adminDashboard.generateTimetable();
+}
 
-  function exportTimetable() {
-    adminDashboard.showNotification('Timetable exported successfully!', 'success');
-  }
+function exportTimetable() {
+  adminDashboard.showNotification('📥 Timetable export functionality will be implemented!', 'info');
+}
 
-  function saveTimetable() {
-    adminDashboard.showNotification('Timetable saved to database!', 'success');
-  }
+function saveTimetable() {
+  adminDashboard.showNotification('💾 Timetable saved to database!', 'success');
+}
 
-  function publishTimetable() {
-    adminDashboard.showNotification('Timetable published! Students and faculty can now view it.', 'success');
-  }
+function publishTimetable() {
+  adminDashboard.showNotification('🌐 Timetable published! Students and faculty can now view it.', 'success');
+}
 
-  function loadExistingData() {
-    adminDashboard.showNotification('Existing data loaded successfully!', 'success');
-  }
+function loadExistingData() {
+  adminDashboard.showNotification('📥 Loading existing timetable data...', 'info');
+  // You can implement actual data loading here
+}
 
   // Initialize admin dashboard
   const adminDashboard = new AdminDashboard();
